@@ -39,4 +39,8 @@ public:
 	afx_msg void OnClickedCheckSsd1306();
 	afx_msg void OnBnClickedButtonDispUpdate();
 	virtual void OnOK();
+	afx_msg void OnClickedCheckIna226();
+
+	static void	DrawTextToSSD1306(HWND hWnd, LPCTSTR pszTitle, LPCTSTR pszText);
+
 };

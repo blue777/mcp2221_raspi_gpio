@@ -114,3 +114,68 @@ void	MCP2221_RasPiGPIO::SSD1306::DrawImage(CBitmap32& image)
 	BYTE*	pbScan0 = image.GetImagePtrScan0(stride);
 	disp.WriteImageBGRA(0, 0, pbScan0, stride, image.GetSize().cx, image.GetSize().cy);
 }
+
+
+MCP2221_RasPiGPIO::INA226::INA226(mcp2221& handle, double shunt_reg) :
+	m_i2c(handle, 0x40 ),
+	m_dShuntReg(shunt_reg)
+{
+	Mcp2221_SetSpeed(handle, 400000);
+}
+
+void	MCP2221_RasPiGPIO::INA226::Init()
+{
+	uint8_t	avg_reg = 0x4;	// 128
+	uint8_t	ct_reg = 0x4;	// 1 msec
+
+	uint8_t  w_data0[3] = {
+		0x00,
+		(uint8_t)(0x40 | (0xe0 & (avg_reg << 1)) | (0x01 & (ct_reg >> 2))),
+		(uint8_t)(0x07 | (0xc0 & (ct_reg << 6)) | (0x38 & (ct_reg << 3))) };
+
+	m_i2c.write(w_data0, sizeof(w_data0));
+
+
+	uint16_t	alert_func = 0x8000;	// ALERT_SHUNT_OVER_VOLT
+	uint16_t	alert_value = (uint16_t)(1.0 / GetA_1LSB());
+
+	uint8_t  w_data6[3] = { 0x06, (uint8_t)(0xFF & (alert_func >> 8)), (uint8_t)(0xFF & alert_func) };
+	uint8_t  w_data7[3] = { 0x07, (uint8_t)(0xFF & (alert_value >> 8)), (uint8_t)(0xFF & alert_value) };
+
+	m_i2c.write(w_data6, sizeof(w_data6));
+	m_i2c.write(w_data7, sizeof(w_data7));
+}
+
+double	MCP2221_RasPiGPIO::INA226::GetV()
+{
+	uint8_t  w_data[1] = { 0x01 };
+	uint8_t  r_data[2] = { 0x00, 0x00 };
+
+	// read vbus
+	w_data[0] = 0x02;
+	m_i2c.write(w_data, sizeof(w_data));
+	m_i2c.read(r_data, sizeof(r_data));
+
+	uint16_t	raw_value = (r_data[0] << 8) | r_data[1];
+	return	0.00125 * raw_value;
+}
+
+double	MCP2221_RasPiGPIO::INA226::GetA()
+{
+	uint8_t	w_data[1] = { 0x01 };
+	uint8_t	r_data[2] = { 0x00, 0x00 };
+
+	// read shunt
+	w_data[0] = 0x01;
+	m_i2c.write(w_data, sizeof(w_data));
+	m_i2c.read(r_data, sizeof(r_data));
+
+	int16_t	raw_value = (r_data[0] << 8) | r_data[1];
+	return	GetA_1LSB() * raw_value;
+}
+
+double	MCP2221_RasPiGPIO::INA226::GetA_1LSB()
+{
+	// 1 LSB : 2.5 uV
+	return	0.0000025 / m_dShuntReg;
+}

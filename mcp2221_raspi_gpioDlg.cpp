@@ -72,6 +72,7 @@ BEGIN_MESSAGE_MAP(Cmcp2221raspigpioDlg, CDialog)
 	ON_BN_CLICKED(IDC_CHECK_GP3, &Cmcp2221raspigpioDlg::OnClickedCheckGp3)
 	ON_BN_CLICKED(IDC_CHECK_SSD1306, &Cmcp2221raspigpioDlg::OnClickedCheckSsd1306)
 	ON_BN_CLICKED(IDC_BUTTON_DISP_UPDATE, &Cmcp2221raspigpioDlg::OnBnClickedButtonDispUpdate)
+	ON_BN_CLICKED(IDC_CHECK_INA226, &Cmcp2221raspigpioDlg::OnClickedCheckIna226)
 END_MESSAGE_MAP()
 
 
@@ -125,6 +126,9 @@ BOOL Cmcp2221raspigpioDlg::OnInitDialog()
 		CheckDlgButton(IDC_CHECK_GP1, gpio.GetOutputValue(1) ? BST_CHECKED : BST_UNCHECKED);
 		CheckDlgButton(IDC_CHECK_GP2, gpio.GetOutputValue(2) ? BST_CHECKED : BST_UNCHECKED);
 		CheckDlgButton(IDC_CHECK_GP3, gpio.GetOutputValue(3) ? BST_CHECKED : BST_UNCHECKED);
+
+		::SetDlgItemText(m_hWnd, IDC_STATIC_VOLTAGE, NULL);
+		::SetDlgItemText(m_hWnd, IDC_STATIC_CURRENT, NULL);
 	}
 
 	return TRUE;  // フォーカスをコントロールに設定した場合を除き、TRUE を返します。
@@ -260,14 +264,23 @@ void Cmcp2221raspigpioDlg::OnClickedCheckSsd1306()
 void Cmcp2221raspigpioDlg::OnBnClickedButtonDispUpdate()
 {
 	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	CString		strTitle, strText;
+
+	GetDlgItemText(IDC_EDIT_DISP_TITLE, strTitle);
+	GetDlgItemText(IDC_EDIT_DISP_TEXT, strText);
+
+	DrawTextToSSD1306(m_hWnd, strTitle, strText);
+}
+
+void	Cmcp2221raspigpioDlg::DrawTextToSSD1306(HWND hWnd, LPCTSTR pszTitle, LPCTSTR pszText)
+{
 	MCP2221_RasPiGPIO::mcp2221	handle;
 	MCP2221_RasPiGPIO::SSD1306	ssd1306(handle);
 
 	if (handle.IsValid())
 	{
-		CString		str;
 		CBitmap32	iBmp;
-		RECT		tRect = { 0, 0, 128, 64 };
+		RECT		tRect = { 1, 0, 128, 64 };
 
 		iBmp.CreateBitmap(128, 64);
 		iBmp.Clear(RGB(0, 0, 0));
@@ -275,22 +288,19 @@ void Cmcp2221raspigpioDlg::OnBnClickedButtonDispUpdate()
 		::SetTextColor(iBmp, RGB(255, 255, 255));
 
 		iBmp.SetFont(16, NULL);
-		GetDlgItemText(IDC_EDIT_DISP_TITLE, str);
-		::DrawText(iBmp, str, str.GetLength(), &tRect, DT_LEFT | DT_TOP);
+		::DrawText(iBmp, pszTitle, lstrlen(pszTitle), &tRect, DT_LEFT | DT_TOP);
 
-
-		tRect.top = 16+3;
+		tRect.top = 16 + 3;
 
 		iBmp.SetFont(42, NULL);
-		GetDlgItemText(IDC_EDIT_DISP_TEXT, str);
-		::DrawText(iBmp, str, str.GetLength(), &tRect, DT_LEFT | DT_TOP);
+		::DrawText(iBmp, pszText, lstrlen(pszText), &tRect, DT_LEFT | DT_TOP);
 
 		ssd1306.DrawImage(iBmp);
 
-		HWND	hWnd = *GetDlgItem(IDC_STATIC_SSD1306);
-		HDC	hDC = ::GetDC(hWnd);
+		HWND	hWndImg = ::GetDlgItem( hWnd, IDC_STATIC_SSD1306);
+		HDC	hDC = ::GetDC(hWndImg);
 		::BitBlt(hDC, 0, 0, iBmp.GetSize().cx, iBmp.GetSize().cy, iBmp, 0, 0, SRCCOPY);
-		::ReleaseDC(hWnd,hDC);
+		::ReleaseDC(hWndImg, hDC);
 	}
 }
 
@@ -300,4 +310,54 @@ void Cmcp2221raspigpioDlg::OnOK()
 	// TODO: ここに特定なコードを追加するか、もしくは基底クラスを呼び出してください。
 
 //	CDialog::OnOK();
+}
+
+
+void Cmcp2221raspigpioDlg::OnClickedCheckIna226()
+{
+	// TODO: ここにコントロール通知ハンドラー コードを追加します。
+	MCP2221_RasPiGPIO::mcp2221	handle;
+	MCP2221_RasPiGPIO::INA226	ina226(handle);
+	const UINT_PTR	TIMER_EVENT_INA226 = 0x226;
+
+	if (handle.IsValid())
+	{
+		if (IsDlgButtonChecked(IDC_CHECK_INA226) == BST_CHECKED)
+		{
+			ina226.Init();
+			::SetTimer(
+				m_hWnd,
+				TIMER_EVENT_INA226,
+				400,
+				[](HWND hWnd,
+					UINT uMsg,      // WM_TIMER
+					UINT_PTR nIDEvent,  // timer ID
+					DWORD dwTime)     // tick count
+				{
+					CString	strV, strA;
+
+					{
+						MCP2221_RasPiGPIO::mcp2221	handle;
+						MCP2221_RasPiGPIO::INA226	ina226(handle);
+
+						strV.Format(TEXT("%.3f [V]"), ina226.GetV());
+						strA.Format(TEXT("%.3f [A]"), ina226.GetA());
+					}
+
+					::SetDlgItemText(hWnd, IDC_STATIC_VOLTAGE, strV );
+					::SetDlgItemText(hWnd, IDC_STATIC_CURRENT, strA );
+
+					if (::IsDlgButtonChecked(hWnd, IDC_CHECK_SSD1306) == BST_CHECKED)
+					{
+						DrawTextToSSD1306(hWnd, strV, strA);
+					}
+				});
+		}
+		else
+		{
+			::KillTimer(m_hWnd, TIMER_EVENT_INA226);
+			::SetDlgItemText(m_hWnd, IDC_STATIC_VOLTAGE, NULL);
+			::SetDlgItemText(m_hWnd, IDC_STATIC_CURRENT, NULL);
+		}
+	}
 }

@@ -2,6 +2,7 @@
 
 #include "common/ctrl_i2c.h"
 
+//#define MCP2221_LIB
 #include <mcp2221_dll_um.h>
 #define	MCP2221_USB_VID		0x04D8
 #define	MCP2221_USB_PID		0x00DD
@@ -227,6 +228,10 @@ public:
 		ctrl_i2c_mcp2221(mcp2221 &handle, int slave_addr) :
 			m_handle(handle)
 		{
+			Mcp2221_SetSpeed(
+				m_handle,
+				400000);
+
 			m_nSlaveAddr = slave_addr;
 			m_handle = handle;
 		}
@@ -269,6 +274,23 @@ public:
 
 	protected:
 		ctrl_i2c_mcp2221	m_i2c;
+	};
+
+	class INA226
+	{
+	public:
+		INA226(mcp2221& handle, double shunt_reg = 0.005 );
+
+		void	Init();
+		double	GetV();
+		double	GetA();
+
+	protected:
+		double GetA_1LSB();
+
+	protected:
+		ctrl_i2c_mcp2221	m_i2c;
+		const double		m_dShuntReg;
 	};
 
 public:
